@@ -68,6 +68,19 @@ func (c *ConsistentHash) Get(key string) (string, error) {
 	return c.nodes[c.search(point)], nil
 }
 
+func (c *ConsistentHash) Nodes() map[uint32]string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.nodes
+}
+
+func (c *ConsistentHash) Clear() {
+	c.Lock()
+	defer c.Unlock()
+	c.nodes = nil
+	c.points = nil
+}
+
 func (c *ConsistentHash) update() {
 	c.points = nil
 	for k, _ := range c.nodes {

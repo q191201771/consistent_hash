@@ -123,6 +123,31 @@ func TestHuge(t *testing.T) {
 	}
 }
 
+func TestNodes(t *testing.T) {
+	ch := Default()
+	ch.Add("node1")
+	ch.Add("node2")
+	kv := ch.Nodes()
+	if len(kv) != 2 {
+		t.Fatalf("nodes [%v] expected len []", len(kv))
+	}
+	for _, node := range kv {
+		if node != "node1" && node != "node2" {
+			t.Fatal(kv)
+		}
+	}
+}
+
+func TestClear(t *testing.T) {
+	ch := Default()
+	ch.Add("node1")
+	ch.Add("node2")
+	ch.Clear()
+	if len(ch.Nodes()) != 0 {
+		t.Fatal(ch.Nodes())
+	}
+}
+
 func UUID() string {
 	out, _ := exec.Command("uuidgen").Output()
 	return strings.TrimSuffix(strings.TrimSuffix(string(out), "\n"), "\r\n")
