@@ -1,103 +1,128 @@
 package consistent_hash
 
 import (
-	"errors"
 	"fmt"
 	"hash/crc32"
 	"sort"
 	"sync"
 )
 
-var errNoNode = errors.New("consistent hash: no node exist")
+type ConsistentHash interface {
+	Exist(node string) bool
+	Add(node string) error
+	Remove(node string) error
+	Get(key string) (string, error)
+	Nodes() []string
+	Clear()
+}
 
-type uints []uint32
-
-func (arr uints) Len() int           { return len(arr) }
-func (arr uints) Less(i, j int) bool { return arr[i] < arr[j] }
-func (arr uints) Swap(i, j int)      { arr[i], arr[j] = arr[j], arr[i] }
-
-type ConsistentHash struct {
+type consistentHash struct {
 	sync.RWMutex
 
-	nodes         map[uint32]string
+	nodes         map[string]bool
+	point2node    map[uint32]string
 	points        uints
 	virtualMultis int
 }
 
-func Default() *ConsistentHash {
+func Default() ConsistentHash {
 	return New(20)
 }
 
-func New(virutalMultis int) *ConsistentHash {
-	return &ConsistentHash{
-		nodes:         make(map[uint32]string),
+func New(virutalMultis int) ConsistentHash {
+	return &consistentHash{
+		nodes:         make(map[string]bool),
+		point2node:    make(map[uint32]string),
 		virtualMultis: virutalMultis,
 	}
 }
 
-func (c *ConsistentHash) Add(node string) {
+func (c *consistentHash) Exist(node string) bool {
+	c.RLock()
+	defer c.RUnlock()
+	return c.exist(node)
+}
+
+func (c *consistentHash) Add(node string) error {
 	c.Lock()
 	defer c.Unlock()
 
+	if c.exist(node) {
+		return ErrNodeAlreadyExist
+	}
+
+	c.nodes[node] = true
 	for i := 0; i < c.virtualMultis; i++ {
 		point := c.hashKey(c.virtualPoint(node, i))
-		c.nodes[point] = node
+		c.point2node[point] = node
 	}
 	c.update()
+	return nil
 }
 
-func (c *ConsistentHash) Remove(node string) {
+func (c *consistentHash) Remove(node string) error {
 	c.Lock()
 	defer c.Unlock()
 
+	if !c.exist(node) {
+		return ErrNodeNotFound
+	}
+
+	delete(c.nodes, node)
 	for i := 0; i < c.virtualMultis; i++ {
 		point := c.hashKey(c.virtualPoint(node, i))
-		delete(c.nodes, point)
+		delete(c.point2node, point)
 	}
 	c.update()
+	return nil
 }
 
-func (c *ConsistentHash) Get(key string) (string, error) {
+func (c *consistentHash) Get(key string) (string, error) {
 	c.RLock()
 	defer c.RUnlock()
 
 	if len(c.points) == 0 {
-		return "", errNoNode
+		return "", ErrNoNode
 	}
 	point := c.hashKey(key)
-	return c.nodes[c.search(point)], nil
+	return c.point2node[c.search(point)], nil
 }
 
-func (c *ConsistentHash) Nodes() map[uint32]string {
+func (c *consistentHash) Nodes() []string {
 	c.RLock()
 	defer c.RUnlock()
-	return c.nodes
+	var ret []string
+	for k, _ := range c.nodes {
+		ret = append(ret, k)
+	}
+	return ret
 }
 
-func (c *ConsistentHash) Clear() {
+func (c *consistentHash) Clear() {
 	c.Lock()
 	defer c.Unlock()
 	c.nodes = nil
 	c.points = nil
+	c.point2node = nil
 }
 
-func (c *ConsistentHash) update() {
+func (c *consistentHash) update() {
 	c.points = nil
-	for k, _ := range c.nodes {
+	for k, _ := range c.point2node {
 		c.points = append(c.points, k)
 	}
 	sort.Sort(c.points)
 }
 
-func (c *ConsistentHash) virtualPoint(node string, index int) string {
-	return fmt.Sprintf("%s%d", node, index)
+func (c *consistentHash) virtualPoint(node string, index int) string {
+	return fmt.Sprintf("%s-%d", node, index)
 }
 
-func (c *ConsistentHash) hashKey(key string) uint32 {
+func (c *consistentHash) hashKey(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
 }
 
-func (c *ConsistentHash) search(point uint32) uint32 {
+func (c *consistentHash) search(point uint32) uint32 {
 	index := sort.Search(len(c.points), func(i int) bool {
 		return c.points[i] >= point
 	})
@@ -105,4 +130,9 @@ func (c *ConsistentHash) search(point uint32) uint32 {
 		return c.points[index]
 	}
 	return c.points[0]
+}
+
+func (c *consistentHash) exist(node string) bool {
+	_, exist := c.nodes[node]
+	return exist
 }

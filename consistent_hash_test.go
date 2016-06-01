@@ -9,9 +9,20 @@ import (
 
 func TestError(t *testing.T) {
 	ch := Default()
-	_, err := ch.Get("aaa")
-	if err != errNoNode {
-		t.Fatalf("err: [%s] expected [%s]", err.Error(), errNoNode.Error())
+	if _, err := ch.Get("aaa"); err != ErrNoNode {
+		t.Fatalf("err: [%s] expected [%s]", err.Error(), ErrNoNode.Error())
+	}
+	if err := ch.Remove("aaa"); err != ErrNodeNotFound {
+		t.Fatalf("err: [%s] expected [nil]", err.Error(), ErrNodeNotFound.Error())
+	}
+	if err := ch.Add("aaa"); err != nil {
+		t.Fatalf("err: [%s] expected [nil]", err.Error())
+	}
+	if err := ch.Add("aaa"); err != ErrNodeAlreadyExist {
+		t.Fatalf("err: [%s] expected [%s]", err.Error(), ErrNodeAlreadyExist.Error())
+	}
+	if err := ch.Remove("aaa"); err != nil {
+		t.Fatalf("err: [%s] expected [nil]", err.Error())
 	}
 }
 
@@ -65,6 +76,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestHuge(t *testing.T) {
+	//return
 	var keys []string
 	for i := 0; i < 10000; i++ {
 		keys = append(keys, UUID())
@@ -129,7 +141,7 @@ func TestNodes(t *testing.T) {
 	ch.Add("node2")
 	kv := ch.Nodes()
 	if len(kv) != 2 {
-		t.Fatalf("nodes [%v] expected len []", len(kv))
+		t.Fatalf("nodes [%v] expected len [2]", len(kv))
 	}
 	for _, node := range kv {
 		if node != "node1" && node != "node2" {
